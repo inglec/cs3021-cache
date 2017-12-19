@@ -3,13 +3,14 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.Queue;
 
 public class TraceFile {
     public static final int BUFFER_SIZE = Integer.BYTES; // Load 4 bytes into buffer each time.
 
-    private ArrayList<AddressRecord> addressRecords = new ArrayList<AddressRecord>();
+    private Queue<AddressRecord> addressRecords = new LinkedList<AddressRecord>();
 
     public TraceFile(String filename) {
         File file = new File(filename);
@@ -23,39 +24,17 @@ public class TraceFile {
             while (returnCode != -1) {
                 int word0 = ByteBuffer.wrap(buffer).getInt();
 
-                int mask = Cache.createMask(23);
-                int address = (word0 & mask) << 2;
+                inputStream.read(buffer); // Fill buffer and get word 1.
+                int word1 = ByteBuffer.wrap(buffer).getInt();
 
-                boolean[] busEnableSignals = new boolean[4];
-                busEnableSignals[0] = ((word0 >> 23) & 1) == 1;
-                busEnableSignals[1] = ((word0 >> 24) & 1) == 1;
-                busEnableSignals[2] = ((word0 >> 25) & 1) == 1;
-                busEnableSignals[3] = ((word0 >> 26) & 1) == 1;
+                addressRecords.add(new AddressRecord(word0, word1));
 
-                mask = Cache.createMask(2);
-                int burstCount = ((word0 >> 27) & mask) + 1;
-
-                boolean writeRead         = ((word0 >> 29) & 1) == 1;
-                boolean dataControl       = ((word0 >> 30) & 1) == 1;
-                boolean memoryInputOutput = ((word0 >> 31) & 1) == 1;
-
-                // Fill buffer and get word 1.
-                returnCode = inputStream.read(buffer);
-                if (returnCode != -1) {
-                    int word1 = ByteBuffer.wrap(buffer).getInt();
-
-                    mask = Cache.createMask(8);
-                    int intervalCount = word1 & mask;
-
-                    addressRecords.add(new AddressRecord(address, busEnableSignals, burstCount, writeRead, dataControl, memoryInputOutput, intervalCount));
-
-                    returnCode = inputStream.read(buffer); // Fill buffer with next word0.
-                }
+                returnCode = inputStream.read(buffer); // Fill buffer with next word0.
             }
-
-            System.out.println("Successfully loaded " + addressRecords.size() + " records from " + filename);
-
             inputStream.close();
+
+            System.out.println("Successfully loaded " + String.format("%,d", addressRecords.size())
+                    + " records from " + filename);
         }
         catch (Exception e) {
             e.printStackTrace();
